@@ -229,7 +229,7 @@ class BlobCollection():
 						contig_base_cov[contig_name] = contig_base_cov.get(contig_name, 0) + sum_of_matchin_bases
 		for contig_id, base_cov in contig_base_cov.items():
 			if contig_id not in self.contigs:
-				sys.exit("[ERROR] - Sequence header %s in %s does not seem to be part of the assembly. FASTA header of sequence in assembly MUST equal reference sequence name in BAM file. Please check your input files." % (contig_id, bam_file)) 
+				sys.exit("[ERROR] - Sequence header %s in %s does not seem to be part of the assembly. FASTA header of sequence in assembly MUST equal reference sequence name in BAM file. Please check your input files." % (contig_id, sam_file)) 
 			else:
 				contig_cov = base_cov / self.contigs[contig_id].corrected_length
 				self.addBlobCov(contig_id, lib_name, contig_cov)

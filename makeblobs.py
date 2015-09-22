@@ -128,14 +128,14 @@ class InputObject():
 		if not taxdb_dir:
 			sys.exit("[ERROR] : Please specify the path to NCBI TaxDB.")
 		if os.path.exists(taxdb_dir):
-			if not os.path.exists(taxdb_dir + "nodes.dmp"):
+			if not os.path.exists( os.path.join(taxdb_dir, "nodes.dmp") ):
 				sys.exit("[ERROR] : 'nodes.dmp' from NCBI TaxDB could not be found in %s." %taxdb_dir)
-			if not os.path.exists(taxdb_dir + "names.dmp"):
+			if not os.path.exists( os.path.join(taxdb_dir, "names.dmp") ):
 				sys.exit("[ERROR] : 'names.dmp' from NCBI TaxDB could not be found in %s." %taxdb_dir)	
 		else:
 			sys.exit("[ERROR] : NCBI TaxDB could not be found in %s." %taxdb_dir)
-		taxdb['nodes'] = taxdb_dir + "nodes.dmp"
-		taxdb['names'] =  taxdb_dir + "names.dmp"
+		taxdb['nodes'] = os.path.join(taxdb_dir, "nodes.dmp")
+		taxdb['names'] = os.path.join(taxdb_dir, "names.dmp")
 		return taxdb
 
 	def getDictOfOutfiles(self, outprefix):

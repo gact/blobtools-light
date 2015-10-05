@@ -17,8 +17,13 @@ The core blobtools-light scripts require these input files:
 
 Most of these files can be created using blobtools-light pipeline scripts (see next section).
 
-<sub><sup>* If assembly was generated through Spades, Abyss or Velvet, coverage can be parsed from contig headers (e.g. -spades SPADESASSEMBLY); if coverage from assembly is not needed -exclude_assembly_cov can be specified.</sup></sub>
-<sub><sup>** The first time BAM/SAM/CAS file(s) gets parsed by blobtools-light, a COV file will be created for each.</sup></sub>
+--------------------------------------------------------------------------------
+###### Notes
+
+* If assembly was generated through Spades, Abyss or Velvet, coverage can be parsed from contig headers (e.g. -spades SPADESASSEMBLY); if coverage from assembly is not needed -exclude_assembly_cov can be specified.
+** The first time BAM/SAM/CAS file(s) gets parsed by blobtools-light, a COV file will be created for each.
+
+--------------------------------------------------------------------------------
 
 If running BLAST directly, the suggested command is:
 ```
@@ -74,7 +79,11 @@ python plotblobs.py test.blobplot.txt -o test
 
 This will produce output as in the example below:
 
+--------------------------------------------------------------------------------
+
 ![Example](example.blobplot.png?raw=true "Example Blobplot")
+
+--------------------------------------------------------------------------------
 
 ## Filtering Blobs
 

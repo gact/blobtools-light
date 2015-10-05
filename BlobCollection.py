@@ -10,13 +10,25 @@ To do 		: Add to CAS parser that it checks that the assembly is the correct one
 """
 
 from __future__ import division
-from MiscFunctions import n50, keyWithMaxVal
-import numpy
-import time
-import subprocess
 import commands
+from ete2 import NCBITaxa
+import numpy
 import re
+import subprocess
 import sys
+import time
+
+from MiscFunctions import keyWithMaxVal
+from MiscFunctions import n50
+from NcbiUtil import getDictOfBestBlastHits
+from Util import formatTaxon
+from Util import getConsensusTaxonomyID
+from Util import getCorrectedNucSeqLength
+from Util import imprecise_sciname_prefixes
+from Util import pseudo_domains
+from Util import RANKS
+from Util import radix_vitae
+from Util import special_taxa
 
 class Blob():
 	'''
@@ -28,7 +40,7 @@ class Blob():
 		self.name = header
 		self.seq = seq.upper()
 		self.length = len(seq)
-		self.corrected_length = len(self.seq) - self.seq.count('N') 
+		self.corrected_length = getCorrectedNucSeqLength(self.seq)
 		self.gc = float((self.seq.count('G') + self.seq.count('C') ) / self.corrected_length ) if self.corrected_length > 0 else 0.0
 		self.covs = dict()
 		self.tax = dict() 
@@ -39,15 +51,15 @@ class BlobCollection():
 	for parsing the input files and doing the necessary computations 
 	for arriving at the final results. 
 	'''
-	def __init__(self, target_ranks, rank_level):
+	def __init__(self, rank_level=None, tax_label='scientific name'):
 		self.contigs = dict()
 		self.index = list()
 		self.outfile = str()
 		self.stats = dict()
 		self.cov_libs = list()
 		self.blast_libs = list()
-		self.target_ranks = target_ranks # this one could be removed, i think
 		self.rank_level = rank_level
+		self.tax_label = tax_label
 		self.blast_order = list()
 
 	def addBlob(self, blob):
@@ -246,124 +258,226 @@ class BlobCollection():
 					contig_id, contig_cov = match.group(1), float(match.group(2))
 					self.addBlobCov(contig_id, lib_name, contig_cov)
 
-	def getTaxForBlobs(self, blast_files, taxdb):
+	def getTaxForBlobs(self, blast_files, target_taxa=()):
+		'''Calculate consensus taxonomy for blob contigs within each BLAST library.
+		
+		For each contig within each BLAST file, take the Taxonomy IDs for the
+		set of hits with the best BLAST E-value and score, get a consensus 
+		Taxonomy ID of the best BLAST hit sequences (the consensus taxid, 
+		E-value, and bitscore are stored in blob.tax[blast_lib]). 
+		
+		The consensus taxid is set to None for blob contigs without a BLAST hit,
+		and later converted to 'no-hit'. If the consensus taxid is '1' (root of 
+		all life), this indicates that an unambiguous consensus taxid could not
+		be found, so this is later converted to 'ambig-hit'.
 		'''
-		- Parses NCBI nodes, names and all BLAST files
-		- gets taxonomy for each BLAST hit taxid (getTaxonomy)
-		- for each BLAST file it sums up the bitscore by rank_level (e.g. phylum) of hit taxonomy and stores them in blob.tax[blast_lib]
-		- then it goes through all blobs again and sets those without hits to 'no-hit'
-		'''
-		nodes_dict = self.parse_taxdb_nodes(taxdb['nodes'])
-		names_dict = self.parse_taxdb_names(taxdb['names'])
+		
+		print("[STATUS] - Getting taxonomy of blob contigs")
+		
+		# Cache reciprocals to avoid needless division.
+		reciprocal = dict()
+		
+		# Load NCBI Taxonomy data.
+		taxonomy = NCBITaxa()
+		
+		# Get all taxids in the clades defined by target taxa.
+		if len(target_taxa) > 0:
+			target_taxids = set()
+			for target_taxon in target_taxa:
+				clade_leaves = taxonomy.get_descendant_taxa(target_taxon)
+				for clade_leaf in clade_leaves:
+					l = taxonomy.get_lineage(clade_leaf)
+					for t in l[l.index(target_taxon):]:
+						target_taxids.add(t)
 
+		# Process each BLAST result file.
 		for blast_lib, blast_file in blast_files.items():
+		
 			self.blast_libs.append(blast_lib)
-			with open(blast_file) as fh:
-				for line in fh:
-					line_data = line.rstrip("\n").split("\t")
-					blast_line_re = re.compile(r"^(\S+)\t(\S+)\t\s*(\S+)") # turns out that blastn output is not tab delimited but tab/(+space) delimited
-					match = blast_line_re.search(line)
-					if match:
-						try:
-							qseqid, taxid, bitscore = match.group(1), int(match.group(2).split(";")[0]), float(match.group(3)) # if more than one taxid is found ... first one will be used
-						except ValueError, e:
-							sys.exit("[ERROR] : BLAST output does not seem to be in the right format ('6 qseqid staxids bitscore ... ')\n" + line)
 						
-						if qseqid in self.contigs: 
-							taxonomy = {}
-							taxonomy = self.getTaxonomy(taxid, taxonomy, nodes_dict, names_dict) # infers taxonomy based on 
-							if not blast_lib in self.contigs[qseqid].tax:
-								self.contigs[qseqid].tax[blast_lib] = {}
-							taxonomic_group = taxonomy[self.rank_level]
-							self.contigs[qseqid].tax[blast_lib][taxonomic_group] = self.contigs[qseqid].tax[blast_lib].get(taxonomic_group, 0) + bitscore							
-						else:
-							print ("[WARN] - {} in {} does not seem to be part of the assembly.".format(qseqid, blast_file))
-					else:
-						sys.exit("[ERROR] - BLAST results in {} do not seem to be in the right format. Please run BLAST with the following option : -outfmt '6 qseqid staxids bitscore'".format(blast_file))
+			hits = getDictOfBestBlastHits(blast_file)
+			
+			# If target taxa specified, give preference to hits within target taxa.
+			if len(target_taxa) > 0:
+				for q in hits:
+					if any( t in target_taxids for t in hits[q]['taxa'] ):
+						rejected_taxids = [ t for t in hits[q]['taxa'] 
+							if t not in target_taxids ] 
+						for t in rejected_taxids:
+							del hits[q]['taxa'][t]
 
+			# Get Taxonomy ID for each contig.
 			for contig_name in self.contigs:
-				if not blast_lib in self.contigs[contig_name].tax:
-					self.contigs[contig_name].tax[blast_lib] = {} 
-					self.contigs[contig_name].tax[blast_lib]['no-hit'] = 0
+			
+				taxid = evalue = bitscore = None
+			
+				if contig_name in hits:
+				
+					# Get taxids, E-value, bitscore.
+					taxids = hits[contig_name]['taxa'].keys()
+					evalue = hits[contig_name]['evalue']
+					bitscore = hits[contig_name]['bitscore']
+													
+					# If there are multiple Taxonomy IDs, get a consensus taxid..
+					if len(taxids) > 1:
+						
+						# Map BLAST result line indices to taxids.
+						index2taxids = dict()
+						for t in taxids:
+							for i in hits[contig_name]['taxa'][t]:
+								index2taxids.setdefault(i, set())
+								index2taxids[i].add(t)
+						
+						# Weight taxa by number of BLAST result lines. Each line 
+						# adds weight 1 to taxon. If many taxa on a single BLAST 
+						# result line, the weight added to each taxon is the 
+						# reciprocal of the number of taxids in that line.
+						taxid_weights = { t: 0 for t in taxids }
+						for i in index2taxids:
+							for t in index2taxids[i]:
+								n = len(index2taxids[i])
+								try:
+									taxid_weights[t] += reciprocal[n] 
+								except KeyError:
+									reciprocal[n] = 1 / n
+									taxid_weights[t] += reciprocal[n]
+						
+						# Get the consensus Taxonomy ID.	
+						taxid = getConsensusTaxonomyID(taxids, 
+							taxid_weights=taxid_weights)
+						
+						if taxid == radix_vitae: 
+							
+							# Get minimal topology of the specified taxids;
+							# its root will be the root of life.
+							tree = taxonomy.get_topology(taxids)
+							
+							# Get children of the root of life.
+							kids = [ kid for kid in tree.get_children() ]
+							
+							# Filter children: keep only real domains of life.
+							domains = [ node for node in kids 
+								if node.taxid not in pseudo_domains ]
+							
+							# If one domain remains, get the consensus 
+							# taxid for the taxids within that domain.
+							if len(domains) == 1:
+								ancestor = domains.pop()
+								taxids = [ node.taxid 
+									for node in ancestor.get_descendants() ]
+								for t in taxid_weights:
+									if t not in taxids:
+										del taxid_weights[t]
+								taxid = getConsensusTaxonomyID(taxids, 
+									taxid_weights=taxid_weights)
+								
+					# ..otherwise take the single Taxonomy ID.														
+					else:
+						taxid = taxids.pop()
+			
+				# If unambiguous consensus taxid found, adjust as appropriate.
+				if taxid not in (None, radix_vitae):
+					
+					# Get lineage of taxid: from taxid to root of life, inclusive.
+					lineage = [ t for t in reversed(taxonomy.get_lineage(taxid)) ]
+				
+					# Check if taxid is in a 'special' taxon (e.g. vectors).
+					special_taxids = [ t for t in lineage if t in special_taxa ]
+				
+					# If special taxids found, set taxid to closest in lineage..
+					if len(special_taxids) > 0:
+					
+						taxid = special_taxids[0]
+					
+					# ..otherwise adjust taxid as normal.
+					else:
+						tax2sciname = taxonomy.get_taxid_translator(lineage)
+						tax2rank = taxonomy.get_rank(lineage)
+						
+						# Check for 'imprecise' scientific names (e.g. 'environmental samples'). 
+						# Set taxid to that of first ancestral taxon in a supported rank.
+						for i, t in enumerate(lineage):
+							if any( tax2sciname[t].startswith(p) for p in imprecise_sciname_prefixes ):
+								for j, u in enumerate(lineage[i+1:]):
+									if tax2rank[u] in RANKS:
+										lineage = lineage[j:]
+										taxid = u
+										break
+								break
+								
+						# Set taxid to first lineage taxon in a supported rank.
+						for i, t in enumerate(lineage):
+							if tax2rank[t] in RANKS:
+								lineage = lineage[i:]
+								taxid = t
+								break
+						
+						# If preferred rank specified, seek taxid for that rank.
+						if self.rank_level is not None:
+							for t in lineage:
+								if tax2rank[t] == self.rank_level:
+									taxid = t
+									break	
 
-	def getTaxonomy(self, taxid, taxonomy, nodes_dict, names_dict):
-		'''
-		gets target_ranks from nodes/names based on taxid and returns taxonomy
-		'''
-		if taxid in nodes_dict: 
-			rank = nodes_dict[int(taxid)]['rank']
-			parent = int(nodes_dict[int(taxid)]['parent'])
-			if taxid == 1 or rank == 'superkingdom':
-				# finish if taxid == 1 (root) or rank == superkingdom
-				taxonomy[rank] = names_dict[int(taxid)] 
-				for rank in self.target_ranks:
-					# set rank to undef if ranks in target ranks was not populated 
-					taxonomy[rank] = taxonomy.get(rank, "undef")
-				return taxonomy
-			else:
-				if rank in self.target_ranks:
-					taxonomy[rank] = names_dict[int(taxid)] 
-				self.getTaxonomy(parent, taxonomy, nodes_dict, names_dict)
-		else:
-			# if taxid is not in nodes_dict then print warning and set all ranks to undef
-			print "[WARN] - Taxid %s not found in TAXDB. This is probably because you have BLASTed against a newer version of NCBI nt. You should update your TAXDB." % taxid
-			taxonomy = {rank: "undef" for rank in self.target_ranks}
-		return taxonomy
+				# Set consensus taxid for this contig in this BLAST library.
+				self.contigs[contig_name].tax[blast_lib] = { 'taxid': taxid,
+					'evalue': evalue, 'bitscore': bitscore }
 
-	def parse_taxdb_names(self, infile):
-		print "[STATUS] - Parsing names.dmp from NCBI taxdb" 
-		names_dict = {}
-		with open(infile) as fh:
-			for line in fh:
-				fields = line.split("\t")
-				if fields[6] == "scientific name":
-					names_dict[int(fields[0])] = fields[2]
-		return names_dict
-
-	def parse_taxdb_nodes(self, infile):
-		print "[STATUS] - Parsing nodes.dmp from NCBI taxdb" 
-		nodes_dict = {}
-		with open(infile) as fh:
-			for line in fh:
-				fields = line.split("\t")
-				nodes_dict[int(fields[0])]={ 'parent' : fields[2] , 'rank' : fields[4] }
-		return nodes_dict
-
-	
 	def getConsensusTaxForBlobs(self, taxrule, blast_order):
-		''' 
-		- Based on taxrule ("A" or "B") and the blast_order (list in order in which blast files where specified) 
-		it calculates the consensus taxonomy for each blob 
+		'''Get consensus taxonomy for blob contigs across BLAST libraries.
+		
+		Based on taxrule ("A" or "B") and the blast_order (list in order in  
+		which blast files where specified) it calculates the consensus taxonomy  
+		for each blob contig. 
 		- if taxrule == A:
-			- it puts all taxonomic groups in a dict with their summed scores as values
-			- if a taxonomic group occurs in hits of more than one BLAST file, the highest score is used
+			- if a blob contig has hits in more than one BLAST file, the BLAST 
+			  hit with the best E-value/bitscore is taken as the best hit, and 
+			  the taxid of this BLAST hit is taken as the consensus taxid
 		- if taxrule == B:
-			- taxonomic groups are put in the dict with their summed scores as values IF they come from the first BLAST file
-			- If there was no hit then take the taxonomic groups from the next one  	
-		- The highest scoring taxonomic group is selected as consensus taxonomy for each blob
+		    - if a blob contig has hits in more than one BLAST file, the BLAST 
+		      hit is taken from the first BLAST result file in which it is found, 
+		      and the taxid of this hit is taken as the consensus taxid
 		'''
+		
+		print("[STATUS] - Getting consensus taxonomy of blob contigs")
+		
 		for contig_name in self.contigs:
-			dict_for_tax_merging = {}
+		
+			consensus = { 'taxid': None, 'evalue': None, 'bitscore': None }
+			
 			for blast_lib in blast_order:
-				for tax, score in sorted(self.contigs[contig_name].tax[blast_lib].items(), key=lambda x: x[1], reverse=True):
-					# loops through tax/score with decreasing score
-					if taxrule == 'A':
-						if not tax in dict_for_tax_merging:
-							dict_for_tax_merging[tax] = score
-						else:
-							if score > dict_for_tax_merging[tax]:
-								dict_for_tax_merging[tax] = score 
-					elif taxrule == 'B':
-						if blast_lib == blast_order[0]:
-							# First blast_lib
-							dict_for_tax_merging[tax] = score
-						else:
-							if len(dict_for_tax_merging) <= 1 and ('no-hit' in dict_for_tax_merging):
-								dict_for_tax_merging[tax] = score	
-
-			tax = keyWithMaxVal(dict_for_tax_merging)
-			self.contigs[contig_name].tax['tax'] = {}
-			self.contigs[contig_name].tax['tax'][tax]=dict_for_tax_merging[tax]
+			
+				# Get best BLAST hit for this contig in this BLAST library.
+				taxid, evalue, bitscore = [ 
+					self.contigs[contig_name].tax[blast_lib][k] 
+					for k in ('taxid', 'evalue', 'bitscore') ]
+				
+				if taxrule == 'A':
+					
+					# If BLAST hit found for this contig in this BLAST library 
+					# and E-value and bitscore are better than previous best, 
+					# set consensus taxid, E-value, bitscore from this hit.
+					if taxid is not None and consensus['taxid'] is not None:
+						e, s = [ consensus[k] for k in ('evalue', 'bitscore') ]
+						if evalue >= e or (evalue == s and bitscore <= s):
+							continue
+					consensus = { 'taxid': taxid, 'evalue': evalue, 
+						'bitscore': bitscore }
+						
+				elif taxrule == 'B':
+					
+					# If BLAST hit found for this contig in this BLAST library, 
+					# set consensus taxid, E-value, bitscore; then continue to 
+					# next contig without looking in subsequent BLAST libraries.
+					if taxid is not None:
+						consensus = { 'taxid': taxid, 'evalue': evalue, 
+							'bitscore': bitscore }
+						break
+			
+			# Set consensus taxid for this contig.
+			self.contigs[contig_name].tax['tax'] = consensus
+		
+		# Add consensus BLAST library 'tax' to BLAST libraries.
 		self.blast_libs.append('tax')
 	
 	def printCOVToFiles(self, mapping_files):
@@ -404,29 +518,29 @@ class BlobCollection():
 
 			for blast_lib in self.blast_libs:
 				
-				bestTax = keyWithMaxVal(blob.tax[blast_lib])
+				taxid = blob.tax[blast_lib]['taxid']
 				if not blast_lib in self.stats['count']:
 					self.stats['count'][blast_lib] = {}
 					self.stats['span'][blast_lib] = {}
 					self.stats['lengths'][blast_lib] = {}
 					self.stats['gc'][blast_lib] = {}
 					self.stats['cov'][blast_lib] = {}
-				self.stats['count'][blast_lib][bestTax] = self.stats['count'][blast_lib].get(bestTax, 0) + 1	
-				self.stats['span'][blast_lib][bestTax] = self.stats['span'][blast_lib].get(bestTax, 0) + blob.length
+				self.stats['count'][blast_lib][taxid] = self.stats['count'][blast_lib].get(taxid, 0) + 1	
+				self.stats['span'][blast_lib][taxid] = self.stats['span'][blast_lib].get(taxid, 0) + blob.length
 
-				if not bestTax in self.stats['gc'][blast_lib]:
-					self.stats['gc'][blast_lib][bestTax] = {'raw' : [], 'mean' : 0.0, 'stdev' : 0.0}
-					self.stats['lengths'][blast_lib][bestTax] = []	
-				self.stats['gc'][blast_lib][bestTax]['raw'].append(blob.gc) 
-				self.stats['lengths'][blast_lib][bestTax].append(blob.length)
+				if not taxid in self.stats['gc'][blast_lib]:
+					self.stats['gc'][blast_lib][taxid] = {'raw' : [], 'mean' : 0.0, 'stdev' : 0.0}
+					self.stats['lengths'][blast_lib][taxid] = []	
+				self.stats['gc'][blast_lib][taxid]['raw'].append(blob.gc) 
+				self.stats['lengths'][blast_lib][taxid].append(blob.length)
 				
 				for cov_lib, cov in blob.covs.items():
 					if not cov_lib in self.stats['cov'][blast_lib]:
 						self.stats['total_cov'][cov_lib] = {'raw' : [], 'mean' : 0.0, 'stdev' : 0.0}
 						self.stats['cov'][blast_lib][cov_lib]={}
-					if not bestTax in self.stats['cov'][blast_lib][cov_lib]:
-						self.stats['cov'][blast_lib][cov_lib][bestTax] = {'raw' : [], 'mean' : 0.0, 'stdev' : 0.0} 
-					self.stats['cov'][blast_lib][cov_lib][bestTax]['raw'].append(cov)
+					if not taxid in self.stats['cov'][blast_lib][cov_lib]:
+						self.stats['cov'][blast_lib][cov_lib][taxid] = {'raw' : [], 'mean' : 0.0, 'stdev' : 0.0} 
+					self.stats['cov'][blast_lib][cov_lib][taxid]['raw'].append(cov)
 			
 			for cov_lib, cov in blob.covs.items():
 				self.stats['total_cov'][cov_lib]['raw'].append(cov)
@@ -467,6 +581,9 @@ class BlobCollection():
 
 		header = '# makeblobs.py v{}\n# {} {}\n# {}\n'.format(version, time.strftime("%Y-%m-%d"), time.strftime("%H:%M:%S"), " ".join(sys.argv))
 		
+		# Init NCBI Taxonomy if necessary.
+		taxonomy = NCBITaxa() if self.tax_label == 'scientific name' else None
+
 		# Writing of stats.txt
 		stats_fh = open(self.outfiles['stats'], 'w')
 		stats_fh.write(header)
@@ -477,7 +594,8 @@ class BlobCollection():
 				stats_string += "\t{:<10}".format(cov_lib)
 			stats_string += "\n\t" + (("-" * 10) + "\t") * (5 + len(self.cov_libs)) + "\n"
 			for tax, score in sorted(self.stats['span'][blast_lib].items(), key=lambda x: x[1], reverse = True):
-				stats_string += "\t{:>10}\t{:>10}\t{:>10}\t{:>10}\t{:>10}".format(tax, self.stats['count'][blast_lib][tax], self.stats['span'][blast_lib][tax], self.stats['n50'][blast_lib][tax],  str(self.stats['gc'][blast_lib][tax]['mean']) + " SD:" + str(self.stats['gc'][blast_lib][tax]['stdev']))
+				taxon = formatTaxon(tax, tax_label=self.tax_label, taxonomy=taxonomy)
+				stats_string += "\t{:>10}\t{:>10}\t{:>10}\t{:>10}\t{:>10}".format(taxon, self.stats['count'][blast_lib][tax], self.stats['span'][blast_lib][tax], self.stats['n50'][blast_lib][tax],  str(self.stats['gc'][blast_lib][tax]['mean']) + " SD:" + str(self.stats['gc'][blast_lib][tax]['stdev']))
 				for cov_lib in self.cov_libs:
 					stats_string += "\t{:>10}".format( str(self.stats['cov'][blast_lib][cov_lib][tax]['mean']) + " SD:" + str(self.stats['cov'][blast_lib][cov_lib][tax]['stdev']))
 				stats_string += "\n"
@@ -500,11 +618,10 @@ class BlobCollection():
 			for cov_lib, cov in blob.covs.items():
 				cov_string += "{}={};".format(cov_lib, cov) 
 			blobs_string += cov_string[0:-1]
-			for blast_lib, tax in blob.tax.items():
-				tax_string += "{}=".format(blast_lib)
-				for phylum, score in sorted(tax.items(), key=lambda x: x[1], reverse = True):
-					tax_string += "{}:{},".format(phylum, score)
-				tax_string = tax_string[0:-1] + ";"
+			for blast_lib in blob.tax:
+				taxon = formatTaxon(blob.tax[blast_lib]['taxid'], 
+					tax_label=self.tax_label, taxonomy=taxonomy)
+				tax_string += "{}={};".format(blast_lib, taxon)
 			blobs_string += tax_string[0:-1]
 			blobs_string += "\n"
 		blobs_fh.write(blobs_string)

@@ -2,13 +2,13 @@
 # -*- coding: utf-8 -*-
 
 """
-File   	: plotblobs.py
+File	: plotblobs.py
 Version : 0.1
-Author 	: Dominik R. Laetsch, dominik.laetsch at gmail dot com 
-Bugs 	: ?
-To do 	: 	- Add read proportion histogram 
+Author	: Dominik R. Laetsch, dominik.laetsch at gmail dot com 
+Bugs	: ?
+To do	:	- Add read proportion histogram 
 			- legend placement at bottom
-			- total reads mapped per phylum
+			- total reads mapped per taxon
 		
 """
 
@@ -17,20 +17,22 @@ To do 	: 	- Add read proportion histogram
 # # # # # 
 
 from __future__ import division
-
-import numpy as np
+import argparse
+from collections import OrderedDict
 import math as math
+from matplotlib import cm
+from matplotlib.lines import Line2D
 import matplotlib as mat
 import matplotlib.pyplot as plt
-import sys
-import argparse
-import os
-
-from matplotlib import cm
+from matplotlib.pyplot import NullLocator
 from matplotlib.ticker import NullFormatter
-from matplotlib.lines import Line2D
+import numpy as np
+import os
+import sys
 
 from MiscFunctions import n50
+from Util import formatBaseCount
+from Util import special_plot_colors
 
 mat.rcParams.update({'font.size': 30})
 mat.rcParams['xtick.major.pad']='8'
@@ -47,7 +49,7 @@ def set_canvas():
 	rect_legend = [left_h, bottom_h, 0.2, 0.2]
 	return rect_scatter, rect_histx, rect_histy, rect_legend
 
-def set_format_scatterplot(axScatter):
+def set_format_scatterplot(axScatter, max_cov=0):
 	axScatter.set_xlabel("GC proportion", fontsize=35)
 	axScatter.set_ylabel("Coverage", fontsize=35)
 	axScatter.grid(True, which="major", lw=2., color=white, linestyle='-') 
@@ -61,21 +63,21 @@ def set_format_scatterplot(axScatter):
 def set_format_hist_x(axHistx, axScatter):
 	axHistx.set_xlim( axScatter.get_xlim() )
 	axHistx.grid(True, which="major", lw=2., color= white, linestyle='-')
-	axHistx.xaxis.set_major_formatter(nullfmt) # no labels since redundant
+	axHistx.xaxis.set_major_formatter(nullFmt) # no labels since redundant
 	axHistx.set_axisbelow(True)
 	axHistx.yaxis.labelpad = 20
 	return axHistx
 
 def set_format_hist_y(axHisty, axScatter):
 	axHisty.set_yscale('log')
-	axHisty.yaxis.set_major_formatter(nullfmt) # no labels since redundant
+	axHisty.yaxis.set_major_formatter(nullFmt) # no labels since redundant
 	axHisty.set_ylim( axScatter.get_ylim() )
 	axHisty.grid(True, which="major", lw=2., color= white, linestyle='-')
 	axHisty.set_axisbelow(True)
 	axHisty.xaxis.labelpad = 20
 	return axHisty
 
-def plot_ref_legend(axScatter):
+def plot_ref_legend(axScatter, fontsize=24):
 	s = 15
 	# markersize in scatter is in "points^2", markersize in Line2D is in "points" ... that's why we need math.sqrt()
 	ref_1 = (Line2D([0], [0], linewidth = 0.5, linestyle="none", marker="o", alpha=1, markersize=math.sqrt(1000/15),  markerfacecolor=grey))
@@ -83,16 +85,30 @@ def plot_ref_legend(axScatter):
 	ref_3 = (Line2D([0], [0], linewidth = 0.5, linestyle="none", marker="o", alpha=1, markersize=math.sqrt(10000/15), markerfacecolor=grey))
 	axScatter.legend([ref_1,ref_2,ref_3], ["1,000nt", "5,000nt", "10,000nt"], numpoints=1, loc = 4, fontsize=fontsize)
 
-def plot(data, cov_data, outfile, title):
+def plot(data, cov_data, outfile, title, multi_plot=False, ignore_contig_len=False,
+	hist_span=True, min_cov=None, max_cov=None, tax_groups=None, color_dict=None, 
+	label_dict=None, fig_format='png', classifier=None):
 	""" Plotting function which gets masked data and plots to outfile"""
+	
+	legend_fontsize = 24
 
+	assert tax_groups is not None, "'tax_groups' not found"
+	assert color_dict is not None, "'color_dict' not found"
+	assert label_dict is not None, "'label_dict' not found"
+	
+	# If not specified explicitly, set coverage bounds from data.
+	if min_cov is None:
+		min_cov = np.amin(cov_data)
+	if max_cov is None:
+		max_cov = np.amax(cov_data)
+	
 	rect_scatter, rect_histx, rect_histy, rect_legend = set_canvas()
 	# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 	# Setting up plots and axes
 	plt.figure(1, figsize=(35,35), dpi=400)
 
 	axScatter = plt.axes(rect_scatter, axisbg=background_grey, yscale = 'log')
-	axScatter = set_format_scatterplot(axScatter)
+	axScatter = set_format_scatterplot(axScatter, max_cov=max_cov)
 	axHistx = plt.axes(rect_histx, axisbg=background_grey)
 	axHistx = set_format_hist_x(axHistx, axScatter)
 	axHisty = plt.axes(rect_histy, axisbg=background_grey)
@@ -104,15 +120,15 @@ def plot(data, cov_data, outfile, title):
 	#plt.suptitle(out_file, fontsize=25, verticalalignment='bottom')
 	
 	axLegend = plt.axes(rect_legend, axisbg=white)
-	axLegend.xaxis.set_major_locator(plt.NullLocator())
-	axLegend.xaxis.set_major_formatter(nullfmt)
-	axLegend.yaxis.set_major_locator(plt.NullLocator())
-	axLegend.yaxis.set_major_formatter(nullfmt)
+	axLegend.xaxis.set_major_locator(nullLoc)
+	axLegend.xaxis.set_major_formatter(nullFmt)  # no labels on axes
+	axLegend.yaxis.set_major_locator(nullLoc)
+	axLegend.yaxis.set_major_formatter(nullFmt)  # no labels on axes
 	#
 	# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 	# Setting bins for histograms
-	top_bins = np.arange(0, 1, 0.01)
+	top_bins = np.arange(0, 1.01, 0.01)
 	right_bins = np.logspace(-2, (int(math.log(max_cov)) + 1), 200, base=10.0)
 
 	# empty handles for big legend
@@ -134,57 +150,56 @@ def plot(data, cov_data, outfile, title):
 	# Maybe make an STDOUT printing func?
 	print "[STATUS] Plotting : " + outfile
 
-	# for each phylum ... they are ordered
-	for tax in tax_list:
-
+	# for each tax-group in order
+	for g in tax_groups:
+	
 		i += 1
 
-		# get indices for those rows in data where the phylum == tax
-		index_for_tax = np.where(data[:,3].astype(str) == tax, True, False)
+		# get indices for those rows in data where the taxon is in this group
+		index_for_group = np.in1d(data[:,3].astype(str), tax_groups[g])
 		# count of contigs ... total number of contigs comes from previous step?
-		number_of_contigs_for_tax = np.sum(index_for_tax)
+		number_of_contigs_for_group = np.sum(index_for_group)
 		
 		# uses number_of_contigs for checking whether plotting should be carried out ... maybe there is a better place for this ...
-		if number_of_contigs_for_tax == 0:
+		if number_of_contigs_for_group == 0:
 			pass
 		else:
-			# sums span for phylum in mb and not ... do we need both?
-			span_of_contigs_for_tax = np.sum(data[index_for_tax][:,1].astype(int))
-			span_of_contigs_for_tax_in_mb = span_of_contigs_for_tax/1000000
-
-			# create np_arrays for length, gc and cov for all contigs in phylum 
-			len_array = data[index_for_tax][:,1].astype(int)
-			gc_array = data[index_for_tax][:,2].astype(float)
-			cov_array = cov_data[index_for_tax].astype(float)
-			# generates label ... this should be turned into a table ...
-			label = tax + " (" + "{:,}".format(number_of_contigs_for_tax) + "; " + "%.2f" % round(span_of_contigs_for_tax_in_mb,2) + "MB; " + "{:,}".format(n50(len_array)) + "nt)"
+			
+			# create np_arrays for length, gc and cov for all contigs in tax-group 
+			len_array = data[index_for_group][:,1].astype(int)
+			gc_array = data[index_for_group][:,2].astype(float)
+			cov_array = cov_data[index_for_group].astype(float)
+			# sets label from label_dict
+			label = label_dict[g]
 
 			# another status message
 			print "\t" + label 
 			s_array = []
 			# ignore contig length ... maybe do this in input and set these params for plotting there ...
 			if (ignore_contig_len):
-				if tax == 'no-hit':
-					s, lw, alpha, color = 15, 0.5, 0.5, grey
+				if g == 'no-hit':
+					s, lw, alpha = 15, 0.5, 0.5
 				else:
-					s, lw, alpha, color = 65, 0.5, 1, color_dict[tax]
+					s, lw, alpha = 65, 0.5, 1
 				s_array = [s for contig_length in len_array]
 			else:
-				if tax == 'no-hit':
-					s, lw, alpha, color = 15, 0.5, 0.5, grey
+				if g == 'no-hit':
+					s, lw, alpha = 15, 0.5, 0.5
 				else:
-					s, lw, alpha, color = 15, 0.5, 1, color_dict[tax]
+					s, lw, alpha = 15, 0.5, 1
 				# these are the sizes for plotting with contig sizes
 				s_array = [contig_length/s for contig_length in len_array]
-			
+			# sets colour from color_dict
+			color = color_dict[g]
+						
 			# making copies of gc/cov_array
 			gc_hist_array = gc_array
 			cov_hist_array = cov_array
 
 			#######
 			# if hist span ... 
-			# 	make a new array ...
-			# 	add to the array : (gc * len/1000) - 1
+			#	 make a new array ...
+			#	 add to the array : (gc * len/1000) - 1
 			# substitute old array with new array
 
 			# set histogram labels depending on type ... can be set before ... 
@@ -203,8 +218,7 @@ def plot(data, cov_data, outfile, title):
 			# add text to legend ... label was build before ... could be a function
 			legend_handles.append(Line2D([0], [0], linewidth = 0.5, linestyle="none", marker="o", alpha=1, markersize=24, markerfacecolor=color))
 			legend_labels.append(label)
-			
-			if (number_of_contigs_for_tax):
+			if (number_of_contigs_for_group):
 				if (hist_span):
 					axHistx.hist(gc_hist_array, weights=weights_array , color = color, bins = top_bins, histtype='step', lw = 3)
 					axHisty.hist(cov_hist_array, weights=weights_array , color = color, bins = right_bins, histtype='step', orientation='horizontal', lw = 3)
@@ -212,22 +226,47 @@ def plot(data, cov_data, outfile, title):
 					axHistx.hist(gc_hist_array, color = color, bins = top_bins, histtype='step', lw = 3)
 					axHisty.hist(cov_hist_array , color = color, bins = right_bins, histtype='step', orientation='horizontal', lw = 3)
 		
+			# If classifier specified, draw classifier regions and boundary.
+			if classifier is not None:
+			
+				# Get GC-content range.
+				gc_range = np.linspace( *axScatter.get_xlim() )
+				
+				# Get log-scaled range of coverage depth.
+				cov_range = np.logspace( *np.log10(axScatter.get_ylim()).tolist() )
+				
+				# Get mesh grid of plot space.
+				X, Y = np.meshgrid(gc_range, cov_range)
+				
+				# Get classifier value at each point in mesh grid.
+				Z = classifier.decision_function( np.c_[ X.ravel(), Y.ravel() ] )
+				Z = Z.reshape(X.shape)
+				
+				# Set contour levels (positive for target, negative for foreign).
+				contour_levels = (np.amin(Z), 0, np.amax(Z))
+				
+				# Draw classifier regions and boundary in background.
+				axScatter.contourf(X, Y, Z, levels=contour_levels, 
+					cmap=plt.cm.coolwarm_r, alpha=0.1, zorder=0)
+				axScatter.contour(X, Y, Z, levels=[0], colors='black', 
+					linestyles='dashed', lw=0.5, zorder=0.1)
+				
 			axScatter.scatter(gc_array, cov_array, color = color, s = s_array, lw = lw, alpha=alpha, edgecolor=black, label=label)
 		
 			axLegend.axis('off')
 
 			if (multi_plot): # MULTI-PLOT!!!
-				axLegend.legend(legend_handles, legend_labels, loc=6, numpoints=1, fontsize=fontsize, frameon=True)
-				plot_ref_legend(axScatter)
-				#plt.savefig(outfile + "." + str(i) + "_"+ tax.replace("/","") + "." + fig_format, format=fig_format)
-				plt.savefig(outfile + "." + str(i) + "_"+ tax.replace("/","") + "." + fig_format, format=fig_format)
+				axLegend.legend(legend_handles, legend_labels, loc=6, numpoints=1, fontsize=legend_fontsize, frameon=True)
+				plot_ref_legend(axScatter, fontsize=legend_fontsize)
+				#plt.savefig(outfile + "." + str(i) + "_"+ g.replace("/","") + "." + fig_format, format=fig_format)
+				plt.savefig(outfile + "." + str(i) + "_"+ g.replace("/","") + "." + fig_format, format=fig_format)
 	
 	if ignore_contig_len:
 		pass
 	else: # print scale-legend
-		plot_ref_legend(axScatter)
+		plot_ref_legend(axScatter, fontsize=legend_fontsize)
 
-	axLegend.legend(legend_handles, legend_labels, numpoints=1, fontsize=fontsize, frameon=True, loc=6 )		
+	axLegend.legend(legend_handles, legend_labels, numpoints=1, fontsize=legend_fontsize, frameon=True, loc=6 )		
 	sys.stdout.write("Saving file " + outfile)
 	plt.savefig(outfile + "." + fig_format, format=fig_format)
 	plt.close()
@@ -240,7 +279,7 @@ def getInput():
 		usage = '%(prog)s infile [-p] [-f] [-t] [-e] [-n] [-o] [-l] [-c] [-s] [-h]',
 		add_help=True)
 	parser.add_argument('i', metavar = 'infile', help='Input file (blobplot.txt)')
-	parser.add_argument('-p', metavar = 'max_taxa_plot', default=7, type = int, help='Maximum number of phyla to plot (Default = 7)')
+	parser.add_argument('-p', metavar = 'max_taxa_plot', default=7, type = int, help='Maximum number of taxa to plot (Default = 7)')
 	#parser.add_argument('-t', metavar = 'tax_level', default=2, type = int, help='Taxonomic level on which to plot.  Species = 0, Order = 1, Phylum = 2, Superkingdom = 3 (Default = 2)')
 	#parser.add_argument('-e', metavar = 'eval_cutoffs' , default=[1.0], type = float, nargs='+', help='Set maximal e-value(s) (Default = 1.0)') 
 	parser.add_argument('-c', metavar = 'len_cutoffs' , default=[100], type = int, nargs='+', help='Set minium contig length(s) (Default = 100)') 
@@ -248,7 +287,7 @@ def getInput():
 	parser.add_argument('-n', action='store_true', help='Hides "no-hit" contigs') 
 	parser.add_argument('-o', metavar ='out_prefix', default='' , help='Set output file prefix.') 
 	parser.add_argument('-m', action='store_true' , help='Multi-plot. Print PNG after each tax-addition.') 
-	parser.add_argument('-sort', action='store_false' , help='Sort by number of contigs per phylum (Default: Sort by span by tax)') 
+	parser.add_argument('-sort', action='store_false' , help='Sort by number of contigs per taxon (Default: Sort by span of taxon)') 
 	parser.add_argument('-hist', action='store_false' , help='Make histograms based on contig counts. (Default: Span-Weighted histograms)') 
 	parser.add_argument('-title', metavar='title' , help='Add title to plot') 
 	parser.add_argument('-v', action='version', version='%(prog)s version 0.1')
@@ -288,7 +327,7 @@ def parseInfile(data):
 				cov_dict = dict(string.split('=') for string in line_data[3].split(";"))
 				cov_dict = {k: (float(v) if float(v) >= 0.1 else 0.1) for k, v in cov_dict.items()} # set coverages below 0.1 to 0.1
 				blast_dict = dict(string.split('=') for string in line_data[4].split(";"))
-				blast_dict = {k: v.split(":")[0] for k, v in blast_dict.items()} # removing bitscores, since not needed anymore
+				blast_dict = {k: v.split(":")[0] for k, v in blast_dict.items()} # removing any text after colon (if present), since not needed
 				tax = blast_dict['tax']
 				
 				contig_data_list.append([(contig_id), (length), (gc), (tax)])
@@ -319,29 +358,86 @@ def getMasks(data, len_cutoffs):
 		mask_dict[key]=mask
 	return mask_dict
 
-def getSortedTax(tax_dict, sort_by_span, max_taxa_plot):
-	""" Returns list of tax of size max_taxa_plot sorted by span or count. """
-	tax_list = []
-	if (sort_by_span):
-		tax_list = sorted(tax_dict, key = lambda x : tax_dict[x]['span'], reverse=True)
+def getTaxGroups(tax_dict, sort_by_span, max_taxa_plot):
+	"""Create OrderedDict of tax groups sorted by span or count.
+	
+	Each tax group maps to a list of taxonomic annotations (including special 
+	annotations such as 'ambig-hit' and 'no-hit'). The tax groups are ordered 
+	by the span or count of their constituent taxa. All tax groups will consist
+	of one annotation, except the tax group 'other-taxa', which groups taxa of
+	low span/count together so as to ensure all taxa are plotted while keeping 
+	within the maximum number of taxa to plot.
+	"""
+	
+	tax_groups = OrderedDict()
+	
+	k = 'span' if sort_by_span else 'count'
+	
+	tax_array = sorted(tax_dict, key=lambda x: tax_dict[x][k], reverse=True)
+
+	special_groups = ('ambig-hit', 'no-hit')
+	standard_indices = np.where(np.in1d(tax_array, special_groups, invert=True) )[0]
+	special_indices = np.where(np.in1d(tax_array, special_groups) )[0]
+	
+	effective_max_taxa = max_taxa_plot - len(special_indices)
+
+	if len(standard_indices) > effective_max_taxa:
+		effective_max_groups = effective_max_taxa - 1
 	else:
-		tax_list = sorted(tax_dict, key = lambda x : tax_dict[x]['count'], reverse=True)
+		effective_max_groups = effective_max_taxa
+		
+	for i in standard_indices[:effective_max_groups]:
+		tax_groups[ tax_array[i] ] = [ tax_array[i] ]
+		
+	for j in special_indices:	
+		tax_groups[ tax_array[j] ] = [ tax_array[j] ]
+	
+	if effective_max_groups < len(standard_indices):
+		tax_groups['other-taxa'] = [ tax_array[i] 
+			for i in standard_indices[effective_max_groups:] ]
 
-	tax_list = tax_list[0:max_taxa_plot] # only return those that will be plotted	
-	return tax_list
-
-def getColorDict(tax_list, colormap):
+	return tax_groups
+	
+def getColorDict(tax_groups, colormap="Set2"):
 	""" Returns colour dict, Not annotated is always grey. """
 	colors = cm.get_cmap(name=colormap)
 	color_index = 1
 	color_dict = {}
-	for tax in tax_list:
-		if tax == "no-hit":
-			color_dict[tax] = grey	
+	
+	num_colors = len(tax_groups) - sum( t in tax_groups 
+		for t in ('ambig-hit', 'no-hit', 'other-taxa') )
+	
+	for i, g in enumerate(tax_groups):
+		if g in ('ambig-hit', 'no-hit', 'other-taxa'):
+			color_dict[g] = special_plot_colors[g]
 		else:
-			color_dict[tax] = mat.colors.rgb2hex(colors(1.0 * (color_index/len(tax_list))))
+			color_dict[g] = mat.colors.rgb2hex(colors(1.0 * (color_index/num_colors)))
 			color_index += 1
+			
 	return color_dict
+
+def getLabelDict(tax_groups, data):
+	"""Returns label dict."""	
+	
+	label_dict = {}
+	
+	for g in tax_groups:
+	
+		m = np.in1d(data[:,3].astype(str), tax_groups[g])
+		number_of_contigs_for_group = np.sum(m)
+	
+		# sums span for taxon group
+		span_of_contigs_for_group = np.sum(data[m][:,1].astype(int))
+	
+		# create np_arrays for length for all contigs in taxon group
+		len_array = data[m][:,1].astype(int)
+	
+		label_dict[g] = "{} ({:,}; {}; {})".format(g, 
+			int(number_of_contigs_for_group), 
+			formatBaseCount(span_of_contigs_for_group), 
+			formatBaseCount(n50(len_array)))
+
+	return label_dict
 
 def getMinMaxCov(cov_dict):
 	max_cov, min_cov = 100.00, 100.00
@@ -354,22 +450,27 @@ def getMinMaxCov(cov_dict):
 	print "[STATUS] - Max.cov = " + str(max_cov) + " / Min.cov = " + str(min_cov)
 	return max_cov, min_cov
 
-if __name__ == "__main__":
-	fontsize = 24
-	colormap = "Set2" # "Paired"
-	black, grey, background_grey, white = '#262626', '#d3d3d3', '#F0F0F5', '#ffffff'
-	fig_format = 'png'
-	nullfmt = NullFormatter()         # no labels on axes
+black, grey, background_grey, white = '#262626', '#d3d3d3', '#F0F0F5', '#ffffff'
+nullFmt = NullFormatter()  # no labels on axes
+nullLoc = NullLocator()  # no ticks on axes
 
+if __name__ == "__main__":
+	colormap = "Set2" # "Paired"
+	
 	infile, out_prefix, max_taxa_plot, len_cutoffs, ignore_contig_len, sort_by_span, multi_plot, hist_span, title = getInput()
 
 	data, tax_dict, cov_dict = parseInfile(infile) # data is a numpy array, tax_dict is a dict, cov_dict is a dict of numpy arrays
 
 	mask_dict = getMasks(data, len_cutoffs) # allows filtering of blobs by length 
 
-	tax_list = getSortedTax(tax_dict, sort_by_span, max_taxa_plot)
+	# Get OrderedDict mapping of tax-groups to taxa.
+	tax_groups = getTaxGroups(tax_dict, sort_by_span, max_taxa_plot)
 	
-	color_dict = getColorDict(tax_list, colormap)
+	# Get mapping of tax-groups to plot colour.
+	color_dict = getColorDict(tax_groups, colormap=colormap)
+	
+	# Get mapping of tax-groups to plot label.
+	label_dict = getLabelDict(tax_groups, data)
 
 	max_cov, min_cov = getMinMaxCov(cov_dict)
 
@@ -378,11 +479,13 @@ if __name__ == "__main__":
 		for key in mask_dict:
 			mask = mask_dict[key]
 			cov = cov_dict[lib]
-			#print lib
-			#print cov[mask]
 			if out_prefix: 
 				outfile = out_prefix + "." + lib + "." + key 
 			else: 
 				outfile =  infile + "." + lib + "." + key 
-			plot(data[mask], cov[mask], outfile, title)
-		#
+			plot(data[mask], cov[mask], outfile, title, 
+				tax_groups=tax_groups, color_dict=color_dict, label_dict=label_dict, 
+				ignore_contig_len=ignore_contig_len, min_cov=min_cov, max_cov=max_cov, 
+				hist_span=hist_span, multi_plot=multi_plot, fig_format='png')
+
+################################################################################

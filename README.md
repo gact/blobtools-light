@@ -1,7 +1,7 @@
 # blobtools-light pipeline
 Light version of the upcoming blobtools package, with additional pipeline scripts.
 
-The core blobtools-light package allows the visualisation of (draft) genome assemblies using TAGC (Taxon-Annotated Gc-Coverage) plots (Kumar et al. 2012).
+The core blobtools-light package allows the visualisation of (draft) genome assemblies using TAGC (Taxon-Annotated Gc-Coverage) plots (<a href="http://www.ncbi.nlm.nih.gov/pubmed/24348509">Kumar et al. 2012</a>).
 
 In addition, the blobtools-light pipeline scripts perform the steps required to create input for the core package, as well as filtering of read data based on blobtools-light output. 
 
@@ -20,8 +20,8 @@ Most of these files can be created using blobtools-light pipeline scripts (see n
 --------------------------------------------------------------------------------
 ###### Notes
 
-* If assembly was generated through Spades, Abyss or Velvet, coverage can be parsed from contig headers (e.g. -spades SPADESASSEMBLY); if coverage from assembly is not needed -exclude_assembly_cov can be specified.
-** The first time BAM/SAM/CAS file(s) gets parsed by blobtools-light, a COV file will be created for each.
+\* If assembly was generated through Spades, Abyss or Velvet, coverage can be parsed from contig headers (e.g. -spades SPADESASSEMBLY); if coverage from assembly is not needed -exclude_assembly_cov can be specified.
+\*\* The first time BAM/SAM/CAS file(s) gets parsed by blobtools-light, a COV file will be created for each.
 
 --------------------------------------------------------------------------------
 

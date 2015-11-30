@@ -70,7 +70,7 @@ imprecise_sciname_prefixes = set([
 
 special_plot_colors = { 
 	'no-hit': cnames['lightgray'], 
-	'ambig-hit': cnames['sage'], 
+	'ambig-hit': cnames['darkseagreen'], 
 	'other-taxa': cnames['darkslategray']
 }
 

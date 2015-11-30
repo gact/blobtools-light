@@ -1,5 +1,5 @@
 # blobtools-light pipeline
-Light version of the upcoming blobtools package, with additional pipeline scripts.
+Light version of the blobtools package, with additional pipeline scripts.
 
 The core blobtools-light package allows the visualisation of (draft) genome assemblies using TAGC (Taxon-Annotated Gc-Coverage) plots (<a href="http://www.ncbi.nlm.nih.gov/pubmed/24348509">Kumar et al. 2012</a>).
 

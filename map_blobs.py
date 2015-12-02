@@ -139,7 +139,7 @@ def mapBlobsBowtie2(args):
 					with open(sam_file, 'a') as fsam:
 						check_call(['bowtie2', '--threads', num_threads, 
 							'--seed', '$RANDOM'] + phred_option + 
-							['--very-sensitive-local', '--sam', '--sam-nohead', '-U', 
+							['--very-sensitive-local', '--no-head', '-U', 
 							orphan_reads, '-x', index_prefix], stdout=fsam, 
 							stderr=nul)
 

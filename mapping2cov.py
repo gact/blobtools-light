@@ -18,8 +18,8 @@ import BlobCollection
 
 def getInput():
 	parser = argparse.ArgumentParser(
-		prog='makeblobs.py',
-		usage = '%(prog)s -a <ASSEMBLY> -cas <CAS> -blast <BLAST> -taxdb <PATH_TO_TAXDB> -o <OUTPUT> [-h]',
+		prog='mapping2cov.py',
+		usage = '%(prog)s -a <ASSEMBLY> -cas <CAS> -blast <BLAST> -o <OUTPUT> [-h]',
 		add_help=True)
 	# only ONE assembly file
 	parser.add_argument('-a', metavar = 'ASSEMBLY_FASTA', default='', help='Assembly file')
@@ -94,7 +94,7 @@ def parseInput(parameters):
 	'''
 	1. Create a BlobCollection Object
 	'''
-	data = BlobCollection.BlobCollection(RANKS, None)
+	data = BlobCollection.BlobCollection()
 	'''
 	2. Parse contigs of assembly into Blob objects in BlobCollection object
 	'''

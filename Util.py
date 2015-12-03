@@ -9,6 +9,7 @@ from Bio.Alphabet.IUPAC import unambiguous_dna
 from collections import deque
 from collections import OrderedDict
 from contextlib import contextmanager
+from crcmod.predefined import mkPredefinedCrcFun
 import csv
 from ete2 import NCBITaxa
 from gzip import GzipFile
@@ -31,6 +32,8 @@ from tempfile import mkdtemp
 ################################################################################
 
 assembly_types = ('unknown', 'SGA')
+
+crc64 = mkPredefinedCrcFun('crc-64-jones')
 
 filter_types = ('include', 'exclude')
 default_filter_type = 'exclude'
@@ -65,7 +68,7 @@ imprecise_sciname_prefixes = set([
 	'uncultured',
 	'unidentified',
 	'unknown',
-	'unspecified'							
+	'unspecified'
 ])
 
 special_plot_colors = { 
@@ -309,7 +312,7 @@ def getConsensusTaxonomyID(taxids, threshold=0.5, taxid_weights=None, taxonomy=N
 						
 		taxid = argmax_taxid
 
-	# ..otherwise resolve taxids using NCBI Taxonomy information.							
+	# ..otherwise resolve taxids using NCBI Taxonomy information.
 	else:
 	
 		# Load NCBI Taxonomy data if necessary.
@@ -570,8 +573,35 @@ def sam2cov(sam_file, assembly_file, cov_file):
 			bam2cov(fbam.name, assembly_file, cov_file)
 
 def stringMD5(string):
-	'''Get hex digest of MD5 checksum for the given string.'''
-	return md5(string).hexdigest()
+	'''Get uppercase hex digest of MD5 checksum for the given string.'''
+	checksum = md5(string)
+	hexdigest = checksum.hexdigest()	
+	return hexdigest.upper()
+
+def stringCRC64(string):
+	'''Get uppercase hex digest of CRC64 checksum for the given string.
+	
+	The CRC function used is the predefined function 'crc-64-jones' implemented 
+	in crcmod, as described by Jones (2002).
+	
+	References
+		
+	Bairoch, Apweiler (2000) The SWISS-PROT protein sequence database and its 
+	supplement TrEMBL in 2000. Nucleic Acids Research. 28(1):45-8. [PMID:10592178]
+	
+	Jones, David (2002). An improved 64-bit cyclic redundancy check for protein 
+	sequences. University College London. 
+	
+	Press, Flannery, Teukolsky, Vetterling (1993) Cyclic redundancy and other 
+	checksums. Numerical recipes in C (Second Edition), New York: Cambridge 
+	University Press. [ISBN:0-521-43108-5]
+	'''
+	checksum = crc64(string)
+	hexdigest = str(hex(checksum))
+	if hexdigest.startswith('0x'):
+		hexdigest = hexdigest[len('0x'):]
+	hexdigest = hexdigest.rstrip('L')
+	return hexdigest.upper()
 
 @contextmanager
 def tempDirectory(suffix='', prefix='tmp', name=None, dir=None):

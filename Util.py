@@ -719,4 +719,5 @@ class blast_tab(text_tab):
 	strict = True	
 csv.register_dialect("blast-tab", blast_tab)	
 
+
 ################################################################################

@@ -106,6 +106,7 @@ that are output by the core blobtools-light scripts.
 ## Software Requirements
 The blobtools-light pipeline package requires Python 2.7+ with the following packages:
 - Biopython 1.65
+- crcmod 1.7
 - ete2 2.3.7
 - matplotlib 1.4
 - NumPy 1.9.1+

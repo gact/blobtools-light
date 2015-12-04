@@ -121,7 +121,7 @@ def mapBlobsBowtie2(args):
 				sam_file = index_prefix + '.sam'
 				with open(sam_file, 'w') as fsam:
 				
-					if reverse_reads is None:
+					if reverse_reads is not None:
 						update("Mapping PE reads to assembly")
 						check_call(['bowtie2', '--threads', num_threads, '--seed', 
 						'$RANDOM'] + phred_option + ['--very-sensitive-local', 

@@ -13,6 +13,7 @@ from NcbiUtil import default_blast_fields
 from NcbiUtil import default_blast_task
 from NcbiUtil import supported_blast_tasks
 from NcbiUtil import validateBlastFields
+from Util import default_rank
 from Util import default_tax_label_type
 from Util import RANKS
 from Util import special_taxa
@@ -67,7 +68,7 @@ def cline_list(argument, dtype=str):
 	try:
 		with open(argument, 'r') as fh:
 			values = tuple( dtype( line.rstrip() ) for line in fh )
-	except (AttributeError, IOError, OSError, ValueError):
+	except (AttributeError, IOError, OSError, TypeError, ValueError):
 		try:
 			values = tuple( map( dtype, argument.split(',') ) )
 		except AttributeError:
@@ -102,7 +103,8 @@ param_groups = OrderedDict([
 		'exclude_unmapped')), 
 	('Phred options', ('phred33', 'phred64')), 
 	('keyword options', ('blob_table', 'blob_stats', 'cov_libs', 'email', 
-		'filter_plot', 'filter_table', 'num_threads', 'plot_title', 'tax_label'))
+		'filter_plot', 'filter_table', 'num_threads', 'plot_title', 'rank', 
+		'tax_label'))
 ])
 
 # Set mutually exclusive parameter groups. Each mutually exclusive group (MXG) 
@@ -304,7 +306,7 @@ param_info = {
 	},
 	'filter_plot': { 
 		'flags': ['-filter_plot'], 
-		'type': pathname,		
+		'type': pathname,
 		'help': 'Prefix of blob contig filter plot file'
 	},
 	'num_threads': { 
@@ -317,11 +319,17 @@ param_info = {
 		'flags': ['-plot_title'],
 		'help': 'Title of plot'
 	},
+	'rank': {
+		'flags': ['-rank'],
+		'default': default_rank,
+		'choices': RANKS,
+		'help': 'Preferred taxonomic rank {!r} (default: {!r})'.format(RANKS, default_rank)
+	},
 	'tax_label': { 
 		'flags': ['-tax_label'], 
 		'default': default_tax_label_type,
 		'choices': tax_label_types,
-		'help': "Select taxon label type (default: {!r})".format(default_tax_label_type)
+		'help': 'Select taxon label type (default: {!r})'.format(default_tax_label_type)
 	}	
 }
 

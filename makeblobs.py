@@ -16,9 +16,7 @@ import os
 import BlobCollection
 
 from ArgUtil import integer_cline_list
-from Util import RANKS
-from Util import default_rank
-from Util import tax_label_types
+from ArgUtil import param_info
 
 class InputObject():
 	def __init__(self, args):
@@ -56,7 +54,7 @@ class InputObject():
 		if self.rank is not None:
 			print "\tWhere possible, taxonomy will be inferred for the following taxonomic rank:\n\t\t - \"{}\"".format(self.rank.capitalize())
 		print('\tTaxon label type: "{}"'.format(self.tax_label))
-		if len(self.target_taxa) > 0:
+		if self.target_taxa is not None:
 			print('\tTarget taxa: {}'.format(', '.join([ str(t) for t in self.target_taxa ])))
 		print "\tOutfiles :\n\t\t - Blob-file : {}\n\t\t - Stats-file : {}\n".format(self.outfiles['blobs'], self.outfiles['stats']) 
 
@@ -152,10 +150,9 @@ def getInput():
 	# multiple BLAST files
 	#parser.add_argument('-tax', action='tax', default=default_rank, choices=RANKS, help='Select target taxonomic rank {!r}. Default = {!r}'.format(RANKS, default_rank))
 	parser.add_argument('-blast', metavar = 'BLAST_FILE', default=[], nargs='+', help='BLAST file') 
-	parser.add_argument('-rank', default=default_rank, choices=RANKS, help='Preferred taxonomic rank {!r}. Default = {!r}'.format(RANKS, default_rank)) 
-	#parser.add_argument('-addrank', metavar = 'TAX_RANK', default=[], nargs='+', help='Print additional taxonomic rank for taxonomified taxid {!r}. Default = None'.format(RANKS)) 
-	parser.add_argument('-tax_label', default='scientific name', choices=tax_label_types, help="Select taxon label type Default = 'scientific name'")
-	parser.add_argument('-target_taxa', type=integer_cline_list, help="NCBI Taxonomy IDs of target taxa")
+	parser.add_argument('-rank', default=param_info['rank']['default'], choices=param_info['rank']['choices'], help=param_info['rank']['help']) 
+	parser.add_argument('-tax_label', default=param_info['tax_label']['default'], choices=param_info['tax_label']['choices'], help=param_info['tax_label']['help'])
+	parser.add_argument('-target_taxa', type=integer_cline_list, default=param_info['target_taxa']['default'], help=param_info['target_taxa']['help'])
 	parser.add_argument('-taxrule', metavar = 'A or B', default='A', help='Tax-rule on how to deal with multiple BLAST libs. A : "higher bitscore wins", B : "Decreasing trust in BLAST libs"') 
 	parser.add_argument('-o', metavar = 'OUTPUT_PREFIX', default='', help='Output prefix') 
 	# Version number

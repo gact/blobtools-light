@@ -321,7 +321,12 @@ def getConsensusTaxonomyID(taxids, threshold=0.5, taxid_weights=None, taxonomy=N
 			
 		# Get minimal topology of the specified taxids.
 		tree = taxonomy.get_topology(taxids)
-													
+		
+		# Check that NCBI topology includes all Taxonomy IDs.
+		tree_taxa = [ node.taxid for node in tree.traverse() ]
+		if any( taxid not in tree_taxa for taxid in taxids ):
+			raise RuntimeError("partial taxonomy tree - update local NCBI Taxonomy database")
+		
 		# Create deque of leaf nodes for leaf-to-root weight calculations.
 		# Nodes will be pushed on left of deque and popped from the right.
 		nodes = deque([ x for x in tree.iter_leaves() ])

@@ -342,7 +342,7 @@ class BlobCollection():
 									reciprocal[n] = 1 / n
 									taxid_weights[t] += reciprocal[n]
 						
-						# Get the consensus Taxonomy ID.	
+						# Get the consensus Taxonomy ID.
 						taxid = getConsensusTaxonomyID(taxids, 
 							taxid_weights=taxid_weights)
 						

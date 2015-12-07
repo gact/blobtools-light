@@ -323,7 +323,7 @@ param_info = {
 		'flags': ['-rank'],
 		'default': default_rank,
 		'choices': RANKS,
-		'help': 'Preferred taxonomic rank {!r} (default: {!r})'.format(RANKS, default_rank)
+		'help': 'Preferred taxonomic rank (default: {!r})'.format(default_rank)
 	},
 	'tax_label': { 
 		'flags': ['-tax_label'], 

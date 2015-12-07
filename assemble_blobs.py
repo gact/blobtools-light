@@ -215,7 +215,7 @@ def filterDuplicateContigs(input_file, output_file):
 					contig_id = record.id
 					if contig_id in duplicate_ids:
 						if contig_id in output_ids:
-							if record.seq != duplicate_seqs[contig_id]:
+							if str(record.seq) != str(duplicate_seqs[contig_id]):
 								raise ValueError("contig ID hash collision (crc-64-jones): {}".format(contig_id))
 							continue
 						duplicate_seqs[contig_id] = record.seq

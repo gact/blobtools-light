@@ -270,6 +270,9 @@ def formatTaxon(taxid, tax_label='scientific name', taxonomy=None):
 
 		if tax_label == 'scientific name':
 			taxon = taxonomy.translate_to_names([taxid])[0]
+			if isinstance(taxon, int):
+				raise RuntimeError("scientific name not found - "
+					"you may need to update local NCBI Taxonomy database")
 		elif tax_label == 'Taxonomy ID':
 			taxon = str(taxid)
 				
@@ -299,7 +302,7 @@ def getConsensusTaxonomyID(taxids, threshold=0.5, taxid_weights=None, taxonomy=N
 		taxid_weights = { t: 1 for t in taxids }
 
 	# Calculate total weight of taxids.
-	total_weight = sum( taxid_weights.values() )	
+	total_weight = sum( taxid_weights.values() )
 
 	# Get threshold weight.
 	threshold_weight = threshold * total_weight
@@ -311,7 +314,7 @@ def getConsensusTaxonomyID(taxids, threshold=0.5, taxid_weights=None, taxonomy=N
 	if taxid_weights[argmax_taxid] > threshold_weight:
 						
 		taxid = argmax_taxid
-
+	
 	# ..otherwise resolve taxids using NCBI Taxonomy information.
 	else:
 	
@@ -325,7 +328,8 @@ def getConsensusTaxonomyID(taxids, threshold=0.5, taxid_weights=None, taxonomy=N
 		# Check that NCBI topology includes all Taxonomy IDs.
 		tree_taxa = [ node.taxid for node in tree.traverse() ]
 		if any( taxid not in tree_taxa for taxid in taxids ):
-			raise RuntimeError("partial taxonomy tree - update local NCBI Taxonomy database")
+			raise RuntimeError("partial taxonomy tree - "
+				"you may need to update local NCBI Taxonomy database")
 		
 		# Create deque of leaf nodes for leaf-to-root weight calculations.
 		# Nodes will be pushed on left of deque and popped from the right.

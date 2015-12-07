@@ -285,6 +285,9 @@ class BlobCollection():
 			target_taxids = set()
 			for target_taxon in target_taxa:
 				clade_leaves = taxonomy.get_descendant_taxa(target_taxon)
+				if len(clade_leaves) == 0:
+					raise ValueError("target taxon not found - "
+						"you may need to update local NCBI Taxonomy database")
 				for clade_leaf in clade_leaves:
 					l = taxonomy.get_lineage(clade_leaf)
 					for t in l[l.index(target_taxon):]:
@@ -317,7 +320,13 @@ class BlobCollection():
 					taxids = hits[contig_name]['taxa'].keys()
 					evalue = hits[contig_name]['evalue']
 					bitscore = hits[contig_name]['bitscore']
-													
+					
+					# Verify all Taxonomy IDs are in NCBI Taxonomy database.
+					rank_info = get_rank(taxids)
+					if any( t not in rank_info for t in taxids ):
+						raise RuntimeError("one or more Taxonomy IDs not found - "
+							"you may need to update local NCBI Taxonomy database")
+					
 					# If there are multiple Taxonomy IDs, get a consensus taxid..
 					if len(taxids) > 1:
 						
@@ -344,12 +353,13 @@ class BlobCollection():
 						
 						# Get the consensus Taxonomy ID.
 						taxid = getConsensusTaxonomyID(taxids, 
-							taxid_weights=taxid_weights)
+							taxid_weights=taxid_weights, 
+							taxonomy=taxonomy)
 						
 						if taxid == radix_vitae: 
 							
-							# Get minimal topology of the specified taxids;
-							# its root will be the root of life.
+							# Get minimal topology of the specified taxids; 
+							# its root will be the root of life. 
 							tree = taxonomy.get_topology(taxids)
 							
 							# Get children of the root of life.
@@ -369,7 +379,8 @@ class BlobCollection():
 									if t not in taxids:
 										del taxid_weights[t]
 								taxid = getConsensusTaxonomyID(taxids, 
-									taxid_weights=taxid_weights)
+									taxid_weights=taxid_weights, 
+									taxonomy=taxonomy)
 								
 					# ..otherwise take the single Taxonomy ID.														
 					else:

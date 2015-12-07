@@ -665,7 +665,11 @@ class InputHandler(object):
 				lineages = [ taxonomy.get_lineage(t) for t in taxa ]
 				rank_info = taxonomy.get_rank(taxa)
 				ranks = [ rank_info[t] for t in taxa ]
-			
+				
+				if any( t not in lineage for t, lineage in zip(taxa, lineages) ):
+					raise RuntimeError("one or more Taxonomy IDs not found - "
+						"you may need to update local NCBI Taxonomy database")
+				
 				for i in range( len(taxa) ):
 					
 					# Verify that taxon is of a supported rank; make exceptions for special taxa.

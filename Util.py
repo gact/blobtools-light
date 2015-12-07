@@ -28,6 +28,7 @@ from subprocess import PIPE
 from subprocess import Popen
 import sys
 from tempfile import mkdtemp
+from warnings import warn
 
 ################################################################################
 
@@ -644,7 +645,11 @@ def tempDirectory(suffix='', prefix='tmp', name=None, dir=None):
 	try:
 		yield twd
 	finally:
-		rmtree(twd)
+		try:
+			rmtree(twd)
+		except OSError:
+			warn("failed to remove temp directory: {!r}".format(twd), 
+				RuntimeWarning)
 
 @contextmanager
 def tempMove(directory):

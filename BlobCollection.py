@@ -322,7 +322,7 @@ class BlobCollection():
 					bitscore = hits[contig_name]['bitscore']
 					
 					# Verify all Taxonomy IDs are in NCBI Taxonomy database.
-					rank_info = get_rank(taxids)
+					rank_info = taxonomy.get_rank(taxids)
 					if any( t not in rank_info for t in taxids ):
 						raise RuntimeError("one or more Taxonomy IDs not found - "
 							"you may need to update local NCBI Taxonomy database")

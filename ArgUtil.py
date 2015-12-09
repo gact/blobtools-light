@@ -13,6 +13,7 @@ from NcbiUtil import default_blast_fields
 from NcbiUtil import default_blast_task
 from NcbiUtil import supported_blast_tasks
 from NcbiUtil import validateBlastFields
+from Util import default_filter_type
 from Util import default_rank
 from Util import default_tax_label_type
 from Util import RANKS

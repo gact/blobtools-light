@@ -183,7 +183,8 @@ def filterBlobs(args):
 
 		# Set filter list filepath to that specified or to a temp file.
 		if filter_file is None:
-			filter_list = NamedTemporaryFile(mode='w', dir=twd, delete=False)
+			filter_temp = NamedTemporaryFile(mode='w', dir=twd, delete=False)
+			filter_list = filter_temp.name
 		else:
 			filter_list = filter_file
 

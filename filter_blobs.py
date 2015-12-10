@@ -455,7 +455,7 @@ def filterBlobs(args):
 						
 						with openFastq(orphan_reads, 'r') as fio:
 						
-							for record in SeqIO.parse(f, 'fastq'):
+							for record in SeqIO.parse(fio, 'fastq'):
 						  
 								r = record.id
 								

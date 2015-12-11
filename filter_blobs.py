@@ -456,33 +456,38 @@ def filterBlobs(args):
 						with openFastq(orphan_reads, 'r') as fio:
 						
 							for record in SeqIO.parse(fio, 'fastq'):
-						  
+						
 								r = record.id
 								
 								# Increment read ID count.
 								seqids.setdefault(r, 0)
 								seqids[r] += 1
-										
-								# Get mapping of read to corresponding contigs.			
+								
+								# Get mapping of read to corresponding contigs.
 								try:
 									read_contig_map = read2ctgs[r]
 								except KeyError as e:
-									if excluding_unmapped:
+									if not excluding_unmapped:
+										read_contig_map = None
+									else:
 										continue
-						
-								# Verify correct read type in read-contig mapping.
-								if len(read_contig_map) != 1:
-									raise ValueError("read type mismatch for {!r}".format(r))
-					  
-					  			# If most corresponding contigs pass, read passes.
-								ctgs = read_contig_map[0].keys()
-								if len(ctgs) == 1:
-									if not contig_passes[ ctgs[0] ]:
-										continue
-								else:
-									passes = sum( 1 if contig_passes[c] else 0 for c in ctgs )
-									if passes / len(ctgs) < 0.5:
-										continue
+								
+								# If read maps to a contig, filter by contig status.
+								if read_contig_map is not None:
+									
+									# Verify correct read type in read-contig mapping.
+									if len(read_contig_map) != 1:
+										raise ValueError("read type mismatch for {!r}".format(r))
+									
+									# If most corresponding contigs pass, read passes.
+									ctgs = read_contig_map[0].keys()
+									if len(ctgs) == 1:
+										if not contig_passes[ ctgs[0] ]:
+											continue
+									else:
+										passes = sum( 1 if contig_passes[c] else 0 for c in ctgs )
+										if passes / len(ctgs) < 0.5:
+											continue
 								
 								SeqIO.write(record, foo, 'fastq')
 				
@@ -506,33 +511,42 @@ def filterBlobs(args):
 					# Increment read ID count.
 					seqids.setdefault(r, 0)
 					seqids[r] += 1
-			   
-			   		# Get mapping(s) of read(s) to corresponding contigs.
+					
+					# Get mapping(s) of read(s) to corresponding contigs.
 					try:
 						read_contig_map = read2ctgs[r]
 					except KeyError as e:
-						if excluding_unmapped:
-							continue
-			
-					# Verify correct read type in read-contig mapping.
-					if len(read_contig_map) != reads_per_fragment:
-						raise ValueError("read type mismatch for {!r}".format(r))
-			
-					# For each read in fragment, if most of the
-					# corresponding contigs pass, read passes.
-					results = [False] * reads_per_fragment
-					for i in range(reads_per_fragment):
-						try:
-							ctgs = read_contig_map[i].keys()
-						except AttributeError:
-							results[i] = False
-							continue
-						if len(ctgs) == 1:
-							results[i] = contig_passes[ ctgs[0] ]
+						if not excluding_unmapped:
+							read_contig_map = None
 						else:
-							passes = sum( 1 if contig_passes[c] else 0 for c in ctgs )
-							results[i] = passes / len(ctgs) >= 0.5
-				
+							continue
+					
+					# If read maps to a contig, filter by contig status.
+					if read_contig_map is not None:
+						
+						# Verify correct read type in read-contig mapping.
+						if len(read_contig_map) != reads_per_fragment:
+							raise ValueError("read type mismatch for {!r}".format(r))
+						
+						# For each read in fragment, if most of the
+						# corresponding contigs pass, read passes.
+						results = [False] * reads_per_fragment
+						for i in range(reads_per_fragment):
+							try:
+								ctgs = read_contig_map[i].keys()
+							except AttributeError:
+								results[i] = False
+								continue
+							if len(ctgs) == 1:
+								results[i] = contig_passes[ ctgs[0] ]
+							else:
+								passes = sum( 1 if contig_passes[c] else 0 for c in ctgs )
+								results[i] = passes / len(ctgs) >= 0.5
+					
+					# ..otherwise pass all reads.
+					else:
+						results = [True] * reads_per_fragment
+					
 					# If SE read passes or PE read pair pass, write to output..
 					if all( result == True for result in results ):
 						for record, fh in zip(records, fout): 

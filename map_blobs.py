@@ -155,7 +155,7 @@ def mapBlobsBowtie2(args):
 
 supported_params = ('alignment options', 'assembly', 'input reads', 
 	'num_threads', 'Phred options')
-required_params = ('assembly', 'input reads', 'mapping')
+required_params = ('assembly', 'forward_reads', 'mapping')
 
 def main(argv):
 	
